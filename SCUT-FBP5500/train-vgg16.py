@@ -6,7 +6,7 @@ import torch.nn as nn
 import torch.optim as optim
 from torchvision import models, transforms
 from torch.utils.data import DataLoader, Dataset
-from torchvision.models import ResNet18_Weights
+from torchvision.models import ResNet18_Weights, VGG16_Weights
 from PIL import Image
 
 from sklearn.metrics import mean_absolute_error, mean_squared_error
@@ -46,22 +46,22 @@ class CustomDataset(Dataset):
 
 def get_model():
     # 加载预训练的 ResNet-18 模型，并设置pretrained=True
-    resnet = models.resnet18(weights=ResNet18_Weights.IMAGENET1K_V1)
+    vgg = models.vgg16(weights=VGG16_Weights.IMAGENET1K_V1)
 
     # 冻结 ResNet-18 的权重
-    for param in resnet.parameters():
+    for param in vgg.parameters():
         param.requires_grad = False
 
     # 修改最后的全连接层以适应特定任务
-    num_features = resnet.fc.in_features
-    resnet.fc = nn.Sequential(
-        nn.Linear(num_features, 1024),
+    num_features = vgg.classifier[-1].in_features
+    vgg.classifier[-1] = nn.Sequential(
+        nn.Linear(num_features, 256),
         nn.ReLU(),
         nn.Dropout(0.5),
-        nn.Linear(1024, 1)
+        nn.Linear(256, 1)
     )
 
-    return resnet
+    return vgg
 
 
 # 计算皮尔逊相关性
@@ -95,15 +95,9 @@ def calculate_errors(y_true, y_pred):
 net = get_model()
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-# 设置其他层的参数为可训练
-# for param in net.parameters():
-#     if param.requires_grad:
-#         print(param.shape)  # 打印出可训练参数的形状
-
 # 数据预处理
 transform = transforms.Compose([
-    transforms.Resize(256),
-    transforms.CenterCrop(224),
+    transforms.Resize(224),
     transforms.ToTensor(),
     transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
 ])
@@ -123,7 +117,7 @@ test_loader = DataLoader(test_dataset, batch_size=16, shuffle=False)
 
 # 定义损失函数和优化器
 criterion = nn.MSELoss()
-optimizer = optim.SGD(net.parameters(), lr=0.001, momentum=0.9, weight_decay=5e-4)
+optimizer = optim.SGD(net.parameters(), lr=0.001, momentum=0.9, weight_decay=1e-4)
 
 # 学习率调度器
 scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=10, gamma=0.1)
